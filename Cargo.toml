@@ -1,0 +1,9 @@
+[package]
+name = "blockpipe"
+version = "0.1.0"
+authors = ["Ales Katona <almindor@gmail.com>"]
+
+[dependencies]
+dotenv = "0.12.0"
+postgres = "0.15.2"
+web3 = "0.3.0"
