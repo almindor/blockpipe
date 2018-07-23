@@ -36,6 +36,14 @@ ON transactions("from");
 CREATE INDEX idx_transactions_to
 ON transactions("to");
 
+CREATE VIEW blocks_view
+AS SELECT b.number, ENCODE(b.hash, 'hex') AS hash, b.timestamp
+FROM blocks b;
+
+CREATE VIEW transactions_view
+AS SELECT ENCODE(hash, 'hex') AS hash, blockNumber, ENCODE(blockHash, 'hex') AS blockHash, ENCODE(t.from, 'hex') AS "from", ENCODE(t.to, 'hex') AS "to", t.value, gas, gasPrice
+FROM transactions t;
+
 GRANT SELECT ON TABLE view_last_block TO bp_writer;
 GRANT INSERT ON TABLE blocks TO bp_writer;
 GRANT INSERT, SELECT, UPDATE ON TABLE transactions TO bp_writer;
