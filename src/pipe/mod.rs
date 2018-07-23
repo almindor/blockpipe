@@ -115,7 +115,7 @@ impl Pipe {
         Pipe::trim_ends(&mut sql_blocks);
         Pipe::trim_ends(&mut sql_transactions);
         // upsert in case of reorg
-        write!(&mut sql_transactions, "\nON CONFLICT (hash) DO UPDATE SET nonce = excluded.nonce, blockHash = excluded.blockHash, blockNumber = excluded.blockNumber, transactionIndex = excluded.transactionIndex, from = excluded.from, to = excluded.to, value = excluded.value, gas = excluded.gas, gasPrice = excluded.gasPrice")?;
+        write!(&mut sql_transactions, "\nON CONFLICT (hash) DO UPDATE SET nonce = excluded.nonce, blockHash = excluded.blockHash, blockNumber = excluded.blockNumber, transactionIndex = excluded.transactionIndex, \"from\" = excluded.from, \"to\" = excluded.to, \"value\" = excluded.value, gas = excluded.gas, gasPrice = excluded.gasPrice")?;
 
         let pg_tx = self.pg_client.transaction()?;
         // save the blocks
