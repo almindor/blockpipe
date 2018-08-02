@@ -1,5 +1,7 @@
 CREATE ROLE bp_writer WITH LOGIN;
 ALTER ROLE bp_writer WITH PASSWORD 'password';
+CREATE ROLE bp_reader WITH LOGIN;
+ALTER ROLE bp_reader WITH PASSWORD 'password';
 
 CREATE DOMAIN ADDRESS AS BYTEA CHECK(length(value) = 20);
 CREATE DOMAIN H256 AS BYTEA CHECK(length(value) = 32);
@@ -36,14 +38,17 @@ ON transactions("from");
 CREATE INDEX idx_transactions_to
 ON transactions("to");
 
-CREATE VIEW blocks_view
-AS SELECT b.number, ENCODE(b.hash, 'hex') AS hash, b.timestamp
+CREATE VIEW view_blocks
+AS SELECT b.number, ENCODE(b.hash, 'hex') AS hash, b.hash AS hash_raw, b.timestamp
 FROM blocks b;
 
-CREATE VIEW transactions_view
-AS SELECT ENCODE(hash, 'hex') AS hash, blockNumber, ENCODE(blockHash, 'hex') AS blockHash, ENCODE(t.from, 'hex') AS "from", ENCODE(t.to, 'hex') AS "to", t.value, gas, gasPrice
+CREATE VIEW view_transactions
+AS SELECT hash AS hash_raw, ENCODE(hash, 'hex') AS hash, blockNumber, ENCODE(blockHash, 'hex') AS blockHash, ENCODE(t.from, 'hex') AS "from", t.from AS from_raw, ENCODE(t.to, 'hex') AS "to", t.to AS to_raw, t.value, gas, gasPrice
 FROM transactions t;
 
 GRANT SELECT ON TABLE view_last_block TO bp_writer;
 GRANT INSERT ON TABLE blocks TO bp_writer;
 GRANT INSERT, SELECT, UPDATE ON TABLE transactions TO bp_writer;
+
+GRANT SELECT ON TABLE view_blocks TO bp_reader;
+GRANT SELECT ON TABLE view_transactions TO bp_reader;
