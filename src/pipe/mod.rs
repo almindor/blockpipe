@@ -133,11 +133,11 @@ impl Pipe {
 
     pub fn run(&mut self) -> Result<i32, error::PipeError> {
         loop {
+            self.update_node_info()?;
             if self.sleep_when_syncing() {
                 continue;
             }
 
-            self.update_node_info()?;
             println!("Queue size: {}", self.last_node_block - self.last_db_block);
 
             while self.last_db_block < self.last_node_block {
