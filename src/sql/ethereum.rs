@@ -1,7 +1,7 @@
 extern crate web3;
 
-use web3::types::{Block, Transaction};
 use sql::Sequelizable;
+use web3::types::{Block, Transaction};
 
 impl Sequelizable for Transaction {
     fn table_name() -> &'static str {
@@ -14,7 +14,8 @@ impl Sequelizable for Transaction {
     }
 
     fn to_insert_values(&self) -> String {
-        format!("DECODE('{:x}', 'hex'), {}, DECODE('{:x}', 'hex'), {}, {}, DECODE('{:x}', 'hex'), {}, {}, {}, {}",
+        format!(
+            "DECODE('{:x}', 'hex'), {}, DECODE('{:x}', 'hex'), {}, {}, DECODE('{:x}', 'hex'), {}, {}, {}, {}",
                 self.hash,
                 self.nonce.as_u64(),
                 self.block_hash.unwrap(),
@@ -41,10 +42,11 @@ impl<TX> Sequelizable for Block<TX> {
     }
 
     fn to_insert_values(&self) -> String {
-        format!("{}, DECODE('{:x}', 'hex'), TO_TIMESTAMP({})",
-                self.number.unwrap().as_u64(),
-                self.hash.unwrap(),
-                self.timestamp.as_u64()
-                )
+        format!(
+            "{}, DECODE('{:x}', 'hex'), TO_TIMESTAMP({})",
+            self.number.unwrap().as_u64(),
+            self.hash.unwrap(),
+            self.timestamp.as_u64()
+        )
     }
 }

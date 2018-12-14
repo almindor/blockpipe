@@ -6,8 +6,8 @@ mod pipe;
 mod sql;
 
 use dotenv::dotenv;
-use std::env;
 use pipe::Pipe;
+use std::env;
 
 fn main() {
     dotenv().ok();

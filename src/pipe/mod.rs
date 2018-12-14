@@ -30,7 +30,10 @@ pub struct Pipe {
 impl Pipe {
     const ONE_MINUTE: time::Duration = time::Duration::from_secs(60);
 
-    pub fn new(ipc_path: &str, pg_path: &str) -> Result<Pipe, Box<std::error::Error>> {
+    pub fn new(
+        ipc_path: &str,
+        pg_path: &str,
+    ) -> Result<Pipe, Box<std::error::Error>> {
         let pg_client = Connection::connect(pg_path, TlsMode::None)?;
         let (eloop, transport) = Ipc::new(ipc_path)?;
 
@@ -96,12 +99,15 @@ impl Pipe {
         let mut processed: i32 = 0;
         let mut processed_tx: i32 = 0;
         let mut sql_blocks: String = String::with_capacity(1096 * 1024 * 10);
-        let mut sql_transactions: String = String::with_capacity(4096 * 1024 * 10);
+        let mut sql_transactions: String =
+            String::with_capacity(4096 * 1024 * 10);
 
         Pipe::write_insert_header::<Block<Transaction>>(&mut sql_blocks)?;
         Pipe::write_insert_header::<Transaction>(&mut sql_transactions)?;
 
-        while processed < MAX_BLOCKS_PER_BATCH && next_block_number <= self.last_node_block {
+        while processed < MAX_BLOCKS_PER_BATCH
+            && next_block_number <= self.last_node_block
+        {
             let block = self
                 .web3
                 .eth()
@@ -114,7 +120,11 @@ impl Pipe {
             write!(&mut sql_blocks, "({}),\n", block.to_insert_values())?;
 
             for tx in block.transactions.iter() {
-                write!(&mut sql_transactions, "({}),\n", tx.to_insert_values())?;
+                write!(
+                    &mut sql_transactions,
+                    "({}),\n",
+                    tx.to_insert_values()
+                )?;
                 processed_tx += 1;
             }
         }
@@ -151,7 +161,10 @@ impl Pipe {
                 continue;
             }
 
-            println!("Queue size: {}", self.last_node_block - self.last_db_block);
+            println!(
+                "Queue size: {}",
+                self.last_node_block - self.last_db_block
+            );
 
             while self.last_db_block < self.last_node_block {
                 self.store_next_batch()?;
