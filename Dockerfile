@@ -14,7 +14,7 @@ COPY ./ ./
 RUN find ./target/release | grep blockpipe | xargs rm -rf && \
   cargo build --release
 
-FROM ubuntu:16.04
+FROM ubuntu:18.04
 
 RUN apt-get update && \
   apt-get install -y libpq-dev libssl-dev && \
