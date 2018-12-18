@@ -1,7 +1,7 @@
-FROM rust:1.31.0-slim as build
+FROM rust:1.31.0 as build
 
-RUN USER=root cargo new --bin /app
-WORKDIR /app
+RUN USER=root cargo new --bin /build_app
+WORKDIR /build_app
 
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
@@ -11,15 +11,17 @@ RUN cargo build --release && \
 
 COPY ./ ./
 
-RUN rm -rf ./target/release/blockpipe && \
+RUN find ./target/release | grep blockpipe | xargs rm -rf && \
   cargo build --release
 
 FROM ubuntu:16.04
 
 RUN apt-get update && \
-  apt-get install -y libpq-dev && \
+  apt-get install -y libpq-dev libssl-dev && \
   touch .env
 
-COPY --from=build /app/target/release/blockpipe ./
+WORKDIR /app
 
-ENTRYPOINT ["/blockpipe"]
+COPY --from=build /build_app/target/release/blockpipe ./
+
+ENTRYPOINT ["/app/blockpipe"]
