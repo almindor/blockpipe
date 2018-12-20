@@ -24,4 +24,7 @@ WORKDIR /app
 
 COPY --from=build /build_app/target/release/blockpipe ./
 
+ENV RPC_PATH=http://localhost:8545/
+ENV PG_PATH=postgres://bp_writer:password@db/blockpipe
+
 ENTRYPOINT ["/app/blockpipe"]
