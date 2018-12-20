@@ -18,10 +18,6 @@ fn main() {
     let ipc_path = env::var("IPC_PATH");
     let http_path = env::var("RPC_PATH");
 
-    ipc_path
-        .or(http_path)
-        .expect("IPC_PATH or RPC_PATH should be provided");
-
     if let Ok(path) = ipc_path {
         let (eloop, transport) =
             Ipc::new(&path).expect("IPC connection failed");
@@ -32,5 +28,7 @@ fn main() {
             Http::new(&path).expect("HTTP connection failed");
         let mut pipe = Pipe::new(transport, eloop, &pg_path).unwrap();
         pipe.run().unwrap();
+    } else {
+        panic!("IPC_PATH or RPC_PATH should be provided");
     }
 }

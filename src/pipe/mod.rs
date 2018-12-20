@@ -68,12 +68,12 @@ impl<T: Transport> Pipe<T> {
 
     fn sleep_with_msg(msg: &str) {
         println!("{}", msg);
-        thread::sleep(Pipe::ONE_MINUTE);
+        thread::sleep(Self::ONE_MINUTE);
     }
 
     fn sleep_when_syncing(&self) -> bool {
         if self.syncing {
-            Pipe::sleep_with_msg("Node is syncing, sleeping for a minute.");
+            Self::sleep_with_msg("Node is syncing, sleeping for a minute.");
             return true;
         }
 
@@ -104,8 +104,8 @@ impl<T: Transport> Pipe<T> {
         let mut sql_transactions: String =
             String::with_capacity(4096 * 1024 * 10);
 
-        Pipe::write_insert_header::<Block<Transaction>>(&mut sql_blocks)?;
-        Pipe::write_insert_header::<Transaction>(&mut sql_transactions)?;
+        Self::write_insert_header::<Block<Transaction>>(&mut sql_blocks)?;
+        Self::write_insert_header::<Transaction>(&mut sql_transactions)?;
 
         while processed < MAX_BLOCKS_PER_BATCH
             && next_block_number <= self.last_node_block
@@ -134,8 +134,8 @@ impl<T: Transport> Pipe<T> {
         if processed == 0 {
             return Ok(0);
         }
-        Pipe::trim_ends(&mut sql_blocks);
-        Pipe::trim_ends(&mut sql_transactions);
+        Self::trim_ends(&mut sql_blocks);
+        Self::trim_ends(&mut sql_transactions);
         // upsert in case of reorg
         write!(&mut sql_transactions, "\nON CONFLICT (hash) DO UPDATE SET nonce = excluded.nonce, blockHash = excluded.blockHash, blockNumber = excluded.blockNumber, transactionIndex = excluded.transactionIndex, \"from\" = excluded.from, \"to\" = excluded.to, \"value\" = excluded.value, gas = excluded.gas, gasPrice = excluded.gasPrice")?;
 
@@ -172,7 +172,7 @@ impl<T: Transport> Pipe<T> {
                 self.store_next_batch()?;
             }
 
-            Pipe::sleep_with_msg("Run done, sleeping for one minute.")
+            Self::sleep_with_msg("Run done, sleeping for one minute.")
         }
     }
 }
