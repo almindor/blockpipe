@@ -9,7 +9,7 @@ use sql;
 use sql::Sequelizable;
 use web3;
 use web3::futures::Future;
-use web3::transports::{EventLoopHandle, Http, Ipc};
+use web3::transports::EventLoopHandle;
 use web3::types::{Block, BlockId, SyncState, Transaction};
 use web3::Transport;
 use web3::Web3;
