@@ -9,8 +9,9 @@ use sql;
 use sql::Sequelizable;
 use web3;
 use web3::futures::Future;
-use web3::transports::{EventLoopHandle, Ipc};
+use web3::transports::{EventLoopHandle, Http, Ipc};
 use web3::types::{Block, BlockId, SyncState, Transaction};
+use web3::Transport;
 use web3::Web3;
 
 mod error;
@@ -18,30 +19,31 @@ mod error;
 const MAX_BLOCKS_PER_BATCH: i32 = 100;
 
 #[allow(dead_code)]
-pub struct Pipe {
+pub struct Pipe<T: Transport> {
     eloop: EventLoopHandle, // needs to be held for event loop to be owned right
-    web3: Web3<Ipc>,
+    web3: Web3<T>,
     pg_client: Connection,
     last_db_block: u64, // due to BIGINT and lack of NUMERIC support in driver
     last_node_block: u64,
     syncing: bool,
 }
 
-impl Pipe {
+impl<T: Transport> Pipe<T> {
     const ONE_MINUTE: time::Duration = time::Duration::from_secs(60);
 
     pub fn new(
-        ipc_path: &str,
+        transport: T,
+        eloop: EventLoopHandle,
         pg_path: &str,
-    ) -> Result<Pipe, Box<std::error::Error>> {
+    ) -> Result<Pipe<T>, Box<std::error::Error>> {
         let pg_client = Connection::connect(pg_path, TlsMode::None)?;
-        let (eloop, transport) = Ipc::new(ipc_path)?;
 
         let rows = pg_client.query(sql::LAST_DB_BLOCK_QUERY, &[])?;
         let last_db_block_number: i64 = match rows.iter().next() {
             Some(row) => row.get(0),
             None => 0,
         };
+
         let web3 = Web3::new(transport);
 
         Ok(Pipe {
@@ -78,14 +80,14 @@ impl Pipe {
         false
     }
 
-    fn write_insert_header<T: Sequelizable>(
+    fn write_insert_header<S: Sequelizable>(
         mut sql_query: &mut String,
     ) -> Result<(), std::fmt::Error> {
         write!(
             &mut sql_query,
             "INSERT INTO {}({}) VALUES\n",
-            T::table_name(),
-            T::insert_fields()
+            S::table_name(),
+            S::insert_fields()
         )
     }
 
