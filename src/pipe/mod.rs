@@ -168,6 +168,11 @@ impl<T: Transport> Pipe<T> {
                 self.last_node_block - self.last_db_block
             );
 
+            println!(
+                "last_db_block: {}, last_node_block: {}",
+                self.last_db_block, self.last_node_block
+            );
+
             while self.last_db_block < self.last_node_block {
                 self.store_next_batch()?;
             }
