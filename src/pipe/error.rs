@@ -1,13 +1,12 @@
-
+use postgres;
 use std;
 use web3;
-use postgres;
 
 #[derive(Debug)]
 pub enum PipeError {
     Fmt(std::fmt::Error),
     Web3(web3::Error),
-    Postgres(postgres::Error)
+    Postgres(postgres::Error),
 }
 
 impl std::fmt::Display for PipeError {

@@ -1,4 +1,3 @@
-
 mod ethereum;
 
 pub const LAST_DB_BLOCK_QUERY: &str = "SELECT number FROM view_last_block";
