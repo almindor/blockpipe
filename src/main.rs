@@ -2,6 +2,9 @@ extern crate dotenv;
 extern crate postgres;
 extern crate web3;
 
+#[cfg(feature="timing")]
+extern crate time;
+
 mod pipe;
 mod sql;
 

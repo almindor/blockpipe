@@ -14,6 +14,9 @@ use web3::types::{Block, BlockId, SyncState, Transaction};
 use web3::Transport;
 use web3::Web3;
 
+#[cfg(feature="timing")]
+use time::{PreciseTime, Duration};
+
 mod error;
 
 const MAX_BLOCKS_PER_BATCH: i32 = 100;
@@ -104,20 +107,33 @@ impl<T: Transport> Pipe<T> {
         let mut sql_transactions: String =
             String::with_capacity(4096 * 1024 * 10);
 
+        #[cfg(feature="timing")]
+        let mut average_duration = Duration::zero();
+
         Self::write_insert_header::<Block<Transaction>>(&mut sql_blocks)?;
         Self::write_insert_header::<Transaction>(&mut sql_transactions)?;
 
         while processed < MAX_BLOCKS_PER_BATCH
             && next_block_number <= self.last_node_block
         {
+            #[cfg(feature="timing")]
+            let start = PreciseTime::now();
+
             let block = self
                 .web3
                 .eth()
                 .block_with_txs(BlockId::from(next_block_number))
                 .wait()?
                 .unwrap();
+
             next_block_number += 1;
             processed += 1;
+
+            #[cfg(feature="timing")]
+            {
+                let end = PreciseTime::now();
+                average_duration = average_duration + start.to(end) / processed;
+            }
 
             write!(&mut sql_blocks, "({}),\n", block.to_insert_values())?;
 
@@ -141,11 +157,24 @@ impl<T: Transport> Pipe<T> {
 
         let pg_tx = self.pg_client.transaction()?;
         // save the blocks
+        #[cfg(feature="timing")]
+        let start_blocks = PreciseTime::now();
+
         pg_tx.execute(&sql_blocks, &[])?;
+
+        #[cfg(feature="timing")]
+        let end_blocks = PreciseTime::now();
+
+        #[cfg(feature="timing")]
+        let start_tx = PreciseTime::now();
 
         if processed_tx > 0 {
             pg_tx.execute(&sql_transactions, &[])?;
         }
+
+        #[cfg(feature="timing")]
+        let end_tx = PreciseTime::now();
+
         pg_tx.commit()?;
 
         self.last_db_block = next_block_number - 1;
@@ -153,6 +182,15 @@ impl<T: Transport> Pipe<T> {
             "Processed {} blocks. At {}/{}",
             processed, self.last_db_block, self.last_node_block
         );
+
+        #[cfg(feature="timing")]
+        println!(
+            "Node duration: {} DB blocks duration: {} DB tx duration: {}",
+            average_duration,
+            start_blocks.to(end_blocks),
+            start_tx.to(end_tx)
+        );
+
         Ok(processed)
     }
 
