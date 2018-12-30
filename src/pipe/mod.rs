@@ -126,14 +126,14 @@ impl<T: Transport> Pipe<T> {
                 .wait()?
                 .unwrap();
 
-            next_block_number += 1;
-            processed += 1;
-
             #[cfg(feature="timing")]
             {
                 let end = PreciseTime::now();
-                average_duration = average_duration + start.to(end) / processed;
+                average_duration = average_duration + start.to(end);
             }
+
+            next_block_number += 1;
+            processed += 1;
 
             write!(&mut sql_blocks, "({}),\n", block.to_insert_values())?;
 
