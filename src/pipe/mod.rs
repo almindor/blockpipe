@@ -185,10 +185,13 @@ impl<T: Transport> Pipe<T> {
 
         #[cfg(feature="timing")]
         println!(
-            "Node duration: {} DB blocks duration: {} DB tx duration: {}",
+            "Node get: {}/{} DB blocks: {}/{} DB tx: {}/{}",
             average_duration,
+            processed,
             start_blocks.to(end_blocks),
-            start_tx.to(end_tx)
+            processed,
+            start_tx.to(end_tx),
+            processed_tx
         );
 
         Ok(processed)
