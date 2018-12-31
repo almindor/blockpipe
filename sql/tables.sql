@@ -36,7 +36,8 @@ CREATE INDEX idx_transactions_from
 ON transactions("from");
 
 CREATE INDEX idx_transactions_to
-ON transactions("to");
+ON transactions("to")
+WHERE "to" IS NOT NULL; -- no need to index all them contract creations
 
 CREATE VIEW view_blocks
 AS SELECT b.number, ENCODE(b.hash, 'hex') AS hash, b.hash AS hash_raw, b.timestamp
