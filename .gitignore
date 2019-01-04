@@ -7,3 +7,8 @@
 
 # Env
 .env
+
+# IDE stuff
+.idea
+*.iml
+run.sh
