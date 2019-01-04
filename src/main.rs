@@ -3,6 +3,10 @@ extern crate postgres;
 extern crate web3;
 extern crate simple_signal;
 
+#[macro_use]
+extern crate log;
+extern crate stderrlog;
+
 #[cfg(feature="timing")]
 extern crate time;
 
@@ -16,6 +20,7 @@ use web3::transports::{Http, Ipc};
 use sql::SqlOperation;
 
 fn main() {
+    stderrlog::new().module(module_path!()).init().unwrap();
     dotenv().ok();
     // main env var, panic if missing
     let pg_path =

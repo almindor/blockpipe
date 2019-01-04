@@ -68,7 +68,7 @@ impl<T: Transport> Pipe<T> {
     }
 
     fn update_node_info(&mut self) -> Result<bool, web3::Error> {
-        eprintln!("Getting info from eth node.");
+        info!("Getting info from eth node.");
         let last_block_number = self.web3.eth().block_number().wait()?.as_u64();
         let syncing = self.web3.eth().syncing().wait()?;
 
@@ -78,7 +78,7 @@ impl<T: Transport> Pipe<T> {
     }
 
     fn sleep_with_msg(msg: &str) {
-        eprintln!("{}", msg);
+        info!("{}", msg);
         thread::sleep(Self::ONE_MINUTE);
     }
 
@@ -103,7 +103,7 @@ impl<T: Transport> Pipe<T> {
     }
 
     fn print_copy_header<S: Sequelizable>() {
-        eprintln!(
+        info!(
             "COPY {}({}) FROM STDIN NULL 'NULL'\n",
             S::table_name(),
             S::insert_fields()
@@ -132,6 +132,7 @@ impl<T: Transport> Pipe<T> {
             Self::write_insert_header::<Transaction>(&mut data_transactions)?;
         }
 
+        trace!("Getting blocks");
         while processed < MAX_BLOCKS_PER_BATCH
             && next_block_number <= self.last_node_block
             && running.load(Ordering::SeqCst)
@@ -152,11 +153,13 @@ impl<T: Transport> Pipe<T> {
                 average_duration = average_duration + start.to(end);
             }
 
+            trace!("Got block #{}", next_block_number);
             next_block_number += 1;
             processed += 1;
 
             write!(&mut sql_blocks, "{}\n", block.to_insert_values())?;
 
+            trace!("Getting transactions for block");
             for tx in block.transactions.iter() {
                 write!(
                     &mut data_transactions,
@@ -165,6 +168,7 @@ impl<T: Transport> Pipe<T> {
                 )?;
                 processed_tx += 1;
             }
+            trace!("Got {} transactions", processed_tx);
         }
 
         if processed == 0 {
@@ -177,6 +181,7 @@ impl<T: Transport> Pipe<T> {
         #[cfg(feature="timing")]
         let start_blocks = PreciseTime::now();
 
+        trace!("Storing {} blocks to DB using insert", processed);
         pg_tx.execute(&sql_blocks, &[])?;
 
         #[cfg(feature="timing")]
@@ -186,6 +191,13 @@ impl<T: Transport> Pipe<T> {
         let start_tx = PreciseTime::now();
 
         if processed_tx > 0 {
+            trace!("Storing {} transactions to DB using {}", processed_tx,
+                match self.operation {
+                    SqlOperation::Insert => "insert",
+                    SqlOperation::Copy => "copy",
+                }
+            );
+
             match self.operation {
                 SqlOperation::Insert => {
                     Self::trim_ends(&mut data_transactions);
@@ -198,16 +210,17 @@ impl<T: Transport> Pipe<T> {
         #[cfg(feature="timing")]
         let end_tx = PreciseTime::now();
 
+        trace!("Commiting direct DB operations");
         pg_tx.commit()?;
 
         self.last_db_block = next_block_number - 1;
-        eprintln!(
+        info!(
             "Processed {} blocks. At {}/{}",
             processed, self.last_db_block, self.last_node_block
         );
 
         #[cfg(feature="timing")]
-        eprintln!(
+        info!(
             "Node get: {:.3}/{} DB blocks: {:.3}/{} DB tx: {:.3}/{}",
             average_duration,
             processed,
@@ -226,13 +239,9 @@ impl<T: Transport> Pipe<T> {
             return Ok(0);
         }
 
-        eprintln!(
-            "Queue size: {}",
-            self.last_node_block - self.last_db_block
-        );
-
-        eprintln!(
-            "last_db_block: {}, last_node_block: {}",
+        info!(
+            "Queue size: {}\nlast_db_block: {}, last_node_block: {}",
+            self.last_node_block - self.last_db_block,
             self.last_db_block, self.last_node_block
         );
 
@@ -257,10 +266,14 @@ impl<T: Transport> Pipe<T> {
         let running = Arc::new(AtomicBool::new(true));
         let r = running.clone();
         simple_signal::set_handler(&[Signal::Int, Signal::Term], move |_signals| {
-            eprintln!("Exiting...");
+            info!("Exiting...");
             r.store(false, Ordering::SeqCst);
         });
+
+        let mut iteration: u64 = 0;
         while running.load(Ordering::SeqCst) {
+            iteration += 1;
+            trace!("Main loop iteration #{}", iteration);
             self.main(&running)?;
         }
 
