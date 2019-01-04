@@ -128,9 +128,8 @@ impl<T: Transport> Pipe<T> {
 
         Self::write_insert_header::<Block<Transaction>>(&mut sql_blocks)?;
 
-        match self.operation {
-            SqlOperation::Insert => Self::write_insert_header::<Transaction>(&mut data_transactions)?,
-            SqlOperation::Copy => {},
+        if self.operation == SqlOperation::Insert {
+            Self::write_insert_header::<Transaction>(&mut data_transactions)?;
         }
 
         while processed < MAX_BLOCKS_PER_BATCH
