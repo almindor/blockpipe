@@ -1,20 +1,12 @@
-extern crate dotenv;
-extern crate postgres;
-extern crate web3;
-extern crate simple_signal;
-
-#[macro_use]
-extern crate log;
-extern crate stderrlog;
+use dotenv::dotenv;
+use std::env;
+use web3::transports::{Http, Ipc};
 
 mod pipe;
 mod sql;
 
-use dotenv::dotenv;
-use pipe::Pipe;
-use std::env;
-use web3::transports::{Http, Ipc};
-use sql::SqlOperation;
+use crate::pipe::Pipe;
+use crate::sql::SqlOperation;
 
 fn main() {
     let timestamps = if cfg!(debug_assertions) {

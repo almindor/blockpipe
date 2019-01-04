@@ -5,8 +5,8 @@ use std;
 use std::fmt::Write;
 use std::string::String;
 
-use sql;
-use sql::{Sequelizable, SqlOperation};
+use crate::sql;
+use crate::sql::{Sequelizable, SqlOperation};
 use web3;
 use web3::futures::Future;
 use web3::transports::EventLoopHandle;
@@ -17,6 +17,7 @@ use web3::Web3;
 use simple_signal::{self, Signal};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use log::{info, trace};
 
 mod error;
 
@@ -36,6 +37,8 @@ pub struct Pipe<T: Transport> {
 impl<T: Transport> Pipe<T> {
     const ONE_MINUTE: time::Duration = time::Duration::from_secs(60);
 
+    // we want to return error here if db fails
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         transport: T,
         eloop: EventLoopHandle,
@@ -58,9 +61,9 @@ impl<T: Transport> Pipe<T> {
         let web3 = Web3::new(transport);
 
         Ok(Pipe {
-            eloop: eloop,
-            web3: web3,
-            pg_client: pg_client,
+            eloop,
+            web3,
+            pg_client,
             last_db_block: last_db_block_number as u64,
             last_node_block: 0,
             syncing: false,
@@ -95,9 +98,9 @@ impl<T: Transport> Pipe<T> {
     fn write_insert_header<S: Sequelizable>(
         mut sql_query: &mut String,
     ) -> Result<(), std::fmt::Error> {
-        write!(
+        writeln!(
             &mut sql_query,
-            "INSERT INTO {}({}) VALUES\n",
+            "INSERT INTO {}({}) VALUES",
             S::table_name(),
             S::insert_fields()
         )
@@ -105,7 +108,7 @@ impl<T: Transport> Pipe<T> {
 
     fn print_copy_header<S: Sequelizable>() {
         info!(
-            "COPY {}({}) FROM STDIN NULL 'NULL'\n",
+            "COPY {}({}) FROM STDIN NULL 'NULL'",
             S::table_name(),
             S::insert_fields()
         );
@@ -150,13 +153,13 @@ impl<T: Transport> Pipe<T> {
             next_block_number += 1;
             processed += 1;
 
-            write!(&mut sql_blocks, "{}\n", block.to_insert_values())?;
+            writeln!(&mut sql_blocks, "{}", block.to_insert_values())?;
 
             trace!("Getting transactions for block");
             for tx in block.transactions.iter() {
-                write!(
+                writeln!(
                     &mut data_transactions,
-                    "{}\n",
+                    "{}",
                     tx.to_values(&self.operation)
                 )?;
                 processed_tx += 1;

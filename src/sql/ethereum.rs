@@ -1,6 +1,6 @@
 extern crate web3;
 
-use sql::Sequelizable;
+use crate::sql::Sequelizable;
 use web3::types::{Block, Transaction, H256, H160};
 
 impl Sequelizable for Transaction {
