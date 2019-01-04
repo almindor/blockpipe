@@ -40,15 +40,20 @@ impl<T: Transport> Pipe<T> {
         transport: T,
         eloop: EventLoopHandle,
         pg_path: &str,
-        op: SqlOperation
+        op: SqlOperation,
+        last_block_override: i64
     ) -> Result<Pipe<T>, Box<std::error::Error>> {
         let pg_client = Connection::connect(pg_path, TlsMode::None)?;
 
         let rows = pg_client.query(sql::LAST_DB_BLOCK_QUERY, &[])?;
-        let last_db_block_number: i64 = match rows.iter().next() {
+        let mut last_db_block_number = match rows.iter().next() {
             Some(row) => row.get(0),
             None => 0,
         };
+
+        if last_block_override > last_db_block_number {
+            last_db_block_number = last_block_override;
+        }
 
         let web3 = Web3::new(transport);
 
@@ -216,7 +221,7 @@ impl<T: Transport> Pipe<T> {
             SqlOperation::Insert => {},
             SqlOperation::Copy => Self::print_copy_header::<Transaction>(),
         }
-        
+
         while self.last_db_block < self.last_node_block && running.load(Ordering::SeqCst) {
             self.store_next_batch(running)?;
         }
