@@ -207,11 +207,13 @@ impl<T: Transport> Pipe<T> {
             }
         }
 
+        trace!("Commiting direct DB operations");
+        pg_tx.commit()?;
+
         #[cfg(feature="timing")]
         let end_tx = PreciseTime::now();
 
-        trace!("Commiting direct DB operations");
-        pg_tx.commit()?;
+
 
         self.last_db_block = next_block_number - 1;
         info!(
