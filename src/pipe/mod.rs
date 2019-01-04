@@ -182,7 +182,7 @@ impl<T: Transport> Pipe<T> {
                 SqlOperation::Copy => {
                     trace!("Commiting direct DB operations");
                     pg_tx.commit()?;
-                    trace!("Storing {} transactions to DB using insert", processed_tx);
+                    trace!("Storing {} transactions to DB using copy", processed_tx);
                     print!("{}", data_transactions);
                 },
             }
