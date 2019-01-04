@@ -6,13 +6,18 @@ use std::fmt::Write;
 use std::string::String;
 
 use sql;
-use sql::Sequelizable;
+use sql::{Sequelizable, SqlOperation};
 use web3;
 use web3::futures::Future;
 use web3::transports::EventLoopHandle;
 use web3::types::{Block, BlockId, SyncState, Transaction};
 use web3::Transport;
 use web3::Web3;
+
+use simple_signal::{self, Signal};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 
 #[cfg(feature="timing")]
 use time::{PreciseTime, Duration};
@@ -29,6 +34,7 @@ pub struct Pipe<T: Transport> {
     last_db_block: u64, // due to BIGINT and lack of NUMERIC support in driver
     last_node_block: u64,
     syncing: bool,
+    operation: SqlOperation,
 }
 
 impl<T: Transport> Pipe<T> {
@@ -38,6 +44,7 @@ impl<T: Transport> Pipe<T> {
         transport: T,
         eloop: EventLoopHandle,
         pg_path: &str,
+        op: SqlOperation
     ) -> Result<Pipe<T>, Box<std::error::Error>> {
         let pg_client = Connection::connect(pg_path, TlsMode::None)?;
 
@@ -56,11 +63,12 @@ impl<T: Transport> Pipe<T> {
             last_db_block: last_db_block_number as u64,
             last_node_block: 0,
             syncing: false,
+            operation: op,
         })
     }
 
     fn update_node_info(&mut self) -> Result<bool, web3::Error> {
-        println!("Getting info from eth node.");
+        eprintln!("Getting info from eth node.");
         let last_block_number = self.web3.eth().block_number().wait()?.as_u64();
         let syncing = self.web3.eth().syncing().wait()?;
 
@@ -70,15 +78,15 @@ impl<T: Transport> Pipe<T> {
     }
 
     fn sleep_with_msg(msg: &str) {
-        println!("{}", msg);
+        eprintln!("{}", msg);
         thread::sleep(Self::ONE_MINUTE);
     }
 
     fn sleep_when_syncing(&self) -> bool {
-        if self.syncing {
-            Self::sleep_with_msg("Node is syncing, sleeping for a minute.");
-            return true;
-        }
+       if self.syncing {
+           Self::sleep_with_msg("Node is syncing, sleeping for a minute.");
+           return true;
+       }
 
         false
     }
@@ -94,27 +102,40 @@ impl<T: Transport> Pipe<T> {
         )
     }
 
+    fn print_copy_header<S: Sequelizable>() {
+        eprintln!(
+            "COPY {}({}) FROM STDIN NULL 'NULL'\n",
+            S::table_name(),
+            S::insert_fields()
+        );
+    }
+
     fn trim_ends(sql_query: &mut String) {
         sql_query.pop(); // remove \n
         sql_query.pop(); // remove ,
     }
 
-    fn store_next_batch(&mut self) -> Result<i32, error::PipeError> {
+    fn store_next_batch(&mut self, running: &Arc<AtomicBool>) -> Result<i32, error::PipeError> {
         let mut next_block_number = self.last_db_block + 1;
         let mut processed: i32 = 0;
         let mut processed_tx: i32 = 0;
         let mut sql_blocks: String = String::with_capacity(1096 * 1024 * 10);
-        let mut sql_transactions: String =
+        let mut data_transactions: String =
             String::with_capacity(4096 * 1024 * 10);
 
         #[cfg(feature="timing")]
         let mut average_duration = Duration::zero();
 
         Self::write_insert_header::<Block<Transaction>>(&mut sql_blocks)?;
-        Self::write_insert_header::<Transaction>(&mut sql_transactions)?;
+
+        match self.operation {
+            SqlOperation::Insert => Self::write_insert_header::<Transaction>(&mut data_transactions)?,
+            SqlOperation::Copy => {},
+        }
 
         while processed < MAX_BLOCKS_PER_BATCH
             && next_block_number <= self.last_node_block
+            && running.load(Ordering::SeqCst)
         {
             #[cfg(feature="timing")]
             let start = PreciseTime::now();
@@ -135,13 +156,13 @@ impl<T: Transport> Pipe<T> {
             next_block_number += 1;
             processed += 1;
 
-            write!(&mut sql_blocks, "({}),\n", block.to_insert_values())?;
+            write!(&mut sql_blocks, "{}\n", block.to_insert_values())?;
 
             for tx in block.transactions.iter() {
                 write!(
-                    &mut sql_transactions,
-                    "({}),\n",
-                    tx.to_insert_values()
+                    &mut data_transactions,
+                    "{}\n",
+                    tx.to_values(&self.operation)
                 )?;
                 processed_tx += 1;
             }
@@ -151,9 +172,6 @@ impl<T: Transport> Pipe<T> {
             return Ok(0);
         }
         Self::trim_ends(&mut sql_blocks);
-        Self::trim_ends(&mut sql_transactions);
-        // upsert in case of reorg
-        write!(&mut sql_transactions, "\nON CONFLICT (hash) DO UPDATE SET nonce = excluded.nonce, blockHash = excluded.blockHash, blockNumber = excluded.blockNumber, transactionIndex = excluded.transactionIndex, \"from\" = excluded.from, \"to\" = excluded.to, \"value\" = excluded.value, gas = excluded.gas, gasPrice = excluded.gasPrice")?;
 
         let pg_tx = self.pg_client.transaction()?;
         // save the blocks
@@ -169,7 +187,13 @@ impl<T: Transport> Pipe<T> {
         let start_tx = PreciseTime::now();
 
         if processed_tx > 0 {
-            pg_tx.execute(&sql_transactions, &[])?;
+            match self.operation {
+                SqlOperation::Insert => {
+                    Self::trim_ends(&mut data_transactions);
+                    pg_tx.execute(&data_transactions, &[])?;
+                },
+                SqlOperation::Copy => print!("{}", data_transactions),
+            }
         }
 
         #[cfg(feature="timing")]
@@ -178,13 +202,13 @@ impl<T: Transport> Pipe<T> {
         pg_tx.commit()?;
 
         self.last_db_block = next_block_number - 1;
-        println!(
+        eprintln!(
             "Processed {} blocks. At {}/{}",
             processed, self.last_db_block, self.last_node_block
         );
 
         #[cfg(feature="timing")]
-        println!(
+        eprintln!(
             "Node get: {:.3}/{} DB blocks: {:.3}/{} DB tx: {:.3}/{}",
             average_duration,
             processed,
@@ -197,28 +221,50 @@ impl<T: Transport> Pipe<T> {
         Ok(processed)
     }
 
-    pub fn run(&mut self) -> Result<i32, error::PipeError> {
-        loop {
-            self.update_node_info()?;
-            if self.sleep_when_syncing() {
-                continue;
-            }
-
-            println!(
-                "Queue size: {}",
-                self.last_node_block - self.last_db_block
-            );
-
-            println!(
-                "last_db_block: {}, last_node_block: {}",
-                self.last_db_block, self.last_node_block
-            );
-
-            while self.last_db_block < self.last_node_block {
-                self.store_next_batch()?;
-            }
-
-            Self::sleep_with_msg("Run done, sleeping for one minute.")
+    pub fn main(&mut self, running: &Arc<AtomicBool>) -> Result<i32, error::PipeError> {
+        self.update_node_info()?;
+        if self.sleep_when_syncing() {
+            return Ok(0);
         }
+
+        eprintln!(
+            "Queue size: {}",
+            self.last_node_block - self.last_db_block
+        );
+
+        eprintln!(
+            "last_db_block: {}, last_node_block: {}",
+            self.last_db_block, self.last_node_block
+        );
+
+        match self.operation {
+            SqlOperation::Insert => {},
+            SqlOperation::Copy => Self::print_copy_header::<Transaction>(),
+        }
+
+
+        while self.last_db_block < self.last_node_block && running.load(Ordering::SeqCst) {
+            self.store_next_batch(running)?;
+        }
+
+        if running.load(Ordering::SeqCst) {
+            Self::sleep_with_msg("Run done, sleeping for one minute.");
+        }
+
+        Ok(0)
+    }
+
+    pub fn run(&mut self) -> Result<i32, error::PipeError> {
+        let running = Arc::new(AtomicBool::new(true));
+        let r = running.clone();
+        simple_signal::set_handler(&[Signal::Int, Signal::Term], move |_signals| {
+            eprintln!("Exiting...");
+            r.store(false, Ordering::SeqCst);
+        });
+        while running.load(Ordering::SeqCst) {
+            self.main(&running)?;
+        }
+
+        Ok(0)
     }
 }
