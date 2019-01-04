@@ -18,10 +18,6 @@ use simple_signal::{self, Signal};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-
-#[cfg(feature="timing")]
-use time::{PreciseTime, Duration};
-
 mod error;
 
 const MAX_BLOCKS_PER_BATCH: i32 = 100;
@@ -123,9 +119,6 @@ impl<T: Transport> Pipe<T> {
         let mut data_transactions: String =
             String::with_capacity(4096 * 1024 * 10);
 
-        #[cfg(feature="timing")]
-        let mut average_duration = Duration::zero();
-
         Self::write_insert_header::<Block<Transaction>>(&mut sql_blocks)?;
 
         if self.operation == SqlOperation::Insert {
@@ -147,12 +140,6 @@ impl<T: Transport> Pipe<T> {
                 .block_with_txs(BlockId::from(next_block_number))
                 .wait()?
                 .unwrap();
-
-            #[cfg(feature="timing")]
-            {
-                let end = PreciseTime::now();
-                average_duration = average_duration + start.to(end);
-            }
 
             trace!("Got block #{}", next_block_number);
             next_block_number += 1;
@@ -179,17 +166,9 @@ impl<T: Transport> Pipe<T> {
 
         let pg_tx = self.pg_client.transaction()?;
         // save the blocks
-        #[cfg(feature="timing")]
-        let start_blocks = PreciseTime::now();
 
         trace!("Storing {} blocks to DB using insert", processed);
         pg_tx.execute(&sql_blocks, &[])?;
-
-        #[cfg(feature="timing")]
-        let end_blocks = PreciseTime::now();
-
-        #[cfg(feature="timing")]
-        let start_tx = PreciseTime::now();
 
         if processed_tx > 0 {
             trace!("Storing {} transactions to DB using {}", processed_tx,
@@ -211,26 +190,10 @@ impl<T: Transport> Pipe<T> {
         trace!("Commiting direct DB operations");
         pg_tx.commit()?;
 
-        #[cfg(feature="timing")]
-        let end_tx = PreciseTime::now();
-
-
-
         self.last_db_block = next_block_number - 1;
         info!(
             "Processed {} blocks. At {}/{}",
             processed, self.last_db_block, self.last_node_block
-        );
-
-        #[cfg(feature="timing")]
-        info!(
-            "Node get: {:.3}/{} DB blocks: {:.3}/{} DB tx: {:.3}/{}",
-            average_duration,
-            processed,
-            start_blocks.to(end_blocks),
-            processed,
-            start_tx.to(end_tx),
-            processed_tx
         );
 
         Ok(processed)

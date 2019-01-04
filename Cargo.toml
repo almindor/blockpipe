@@ -11,7 +11,3 @@ simple-signal = "1.1.1"
 log = { version = "0.4.6", features = ["release_max_level_info"] }
 stderrlog = "0.4.1"
 
-time = { version = "*", optional = true }
-
-[features]
-timing = ["time"]

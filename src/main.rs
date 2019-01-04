@@ -7,9 +7,6 @@ extern crate simple_signal;
 extern crate log;
 extern crate stderrlog;
 
-#[cfg(feature="timing")]
-extern crate time;
-
 mod pipe;
 mod sql;
 
