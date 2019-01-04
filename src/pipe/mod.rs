@@ -171,24 +171,25 @@ impl<T: Transport> Pipe<T> {
         pg_tx.execute(&sql_blocks, &[])?;
 
         if processed_tx > 0 {
-            trace!("Storing {} transactions to DB using {}", processed_tx,
-                match self.operation {
-                    SqlOperation::Insert => "insert",
-                    SqlOperation::Copy => "copy",
-                }
-            );
-
             match self.operation {
                 SqlOperation::Insert => {
-                    Self::trim_ends(&mut data_transactions);
+                    trace!("Storing {} transactions to DB using insert", processed_tx);
+                           Self::trim_ends(&mut data_transactions);
                     pg_tx.execute(&data_transactions, &[])?;
+                    trace!("Commiting direct DB operations");
+                    pg_tx.commit()?;
                 },
-                SqlOperation::Copy => print!("{}", data_transactions),
+                SqlOperation::Copy => {
+                    trace!("Commiting direct DB operations");
+                    pg_tx.commit()?;
+                    trace!("Storing {} transactions to DB using insert", processed_tx);
+                    print!("{}", data_transactions);
+                },
             }
+        } else {
+            trace!("Commiting direct DB operations");
+            pg_tx.commit()?;
         }
-
-        trace!("Commiting direct DB operations");
-        pg_tx.commit()?;
 
         self.last_db_block = next_block_number - 1;
         info!(
