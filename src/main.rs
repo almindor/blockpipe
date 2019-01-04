@@ -20,7 +20,13 @@ use web3::transports::{Http, Ipc};
 use sql::SqlOperation;
 
 fn main() {
-    stderrlog::new().module(module_path!()).init().unwrap();
+    stderrlog::new().module(module_path!())
+        .verbosity(255) // controlled by compile time feature definitions
+        .init()
+        .unwrap();
+
+    info!("INFO");
+    trace!("TRACE");
     dotenv().ok();
     // main env var, panic if missing
     let pg_path =
