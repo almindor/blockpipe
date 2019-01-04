@@ -140,6 +140,7 @@ impl<T: Transport> Pipe<T> {
             #[cfg(feature="timing")]
             let start = PreciseTime::now();
 
+            trace!("Getting block #{}", next_block_number);
             let block = self
                 .web3
                 .eth()
