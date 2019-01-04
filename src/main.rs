@@ -17,12 +17,18 @@ use web3::transports::{Http, Ipc};
 use sql::SqlOperation;
 
 fn main() {
+    let timestamps = if cfg!(debug_assertions) {
+        stderrlog::Timestamp::Millisecond
+    } else {
+        stderrlog::Timestamp::Off
+    };
+
     stderrlog::new().module(module_path!())
         .verbosity(255) // controlled by compile time feature definitions
-        .timestamp(stderrlog::Timestamp::Millisecond)
+        .timestamp(timestamps)
         .init()
         .unwrap();
-
+    
     dotenv().ok();
     // main env var, panic if missing
     let pg_path =

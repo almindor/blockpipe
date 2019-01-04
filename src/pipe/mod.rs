@@ -216,8 +216,7 @@ impl<T: Transport> Pipe<T> {
             SqlOperation::Insert => {},
             SqlOperation::Copy => Self::print_copy_header::<Transaction>(),
         }
-
-
+        
         while self.last_db_block < self.last_node_block && running.load(Ordering::SeqCst) {
             self.store_next_batch(running)?;
         }
