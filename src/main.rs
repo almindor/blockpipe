@@ -22,11 +22,10 @@ use sql::SqlOperation;
 fn main() {
     stderrlog::new().module(module_path!())
         .verbosity(255) // controlled by compile time feature definitions
+        .timestamp(stderrlog::Timestamp::Millisecond)
         .init()
         .unwrap();
 
-    info!("INFO");
-    trace!("TRACE");
     dotenv().ok();
     // main env var, panic if missing
     let pg_path =
