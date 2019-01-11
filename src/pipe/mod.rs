@@ -183,8 +183,8 @@ impl<T: Transport> Pipe<T> {
                 SqlOperation::Insert => {
                     trace!("Storing {} transactions to DB using insert", processed_tx);
                     // upsert in case of reorg
-                    write!(&mut data_transactions, "\nON CONFLICT (hash) DO UPDATE SET nonce = excluded.nonce, blockHash = excluded.blockHash, blockNumber = excluded.blockNumber, transactionIndex = excluded.transactionIndex, \"from\" = excluded.from, \"to\" = excluded.to, \"value\" = excluded.value, gas = excluded.gas, gasPrice = excluded.gasPrice")?;
                     Self::trim_ends(&mut data_transactions);
+                    write!(&mut data_transactions, "\nON CONFLICT (hash) DO UPDATE SET nonce = excluded.nonce, blockHash = excluded.blockHash, blockNumber = excluded.blockNumber, transactionIndex = excluded.transactionIndex, \"from\" = excluded.from, \"to\" = excluded.to, \"value\" = excluded.value, gas = excluded.gas, gasPrice = excluded.gasPrice")?;
                     pg_tx.execute(&data_transactions, &[])?;
                     trace!("Commiting direct DB operations");
                     pg_tx.commit()?;
