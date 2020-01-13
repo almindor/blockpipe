@@ -41,10 +41,9 @@ fn main() {
         env::var("PG_PATH").expect("PG_PATH env var should be provided");
     let ipc_path = env::var("IPC_PATH");
     let http_path = env::var("RPC_PATH");
-    let labo = if env::var("LABO").is_ok() {
-        env::var("LABO").unwrap().parse::<i64>().unwrap()
-    } else {
-        0
+    let labo = match env::var("LABO") {
+        Ok(val) => val.parse::<i64>().unwrap(),
+        Err(_) => 0,
     };
     let mut operation = SqlOperation::Insert;
 
