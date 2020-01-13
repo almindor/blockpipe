@@ -7,7 +7,7 @@ pub const LAST_DB_BLOCK_QUERY: &str = "SELECT number FROM view_last_block";
 #[derive(PartialEq)]
 pub enum SqlOperation {
     Insert,
-    Copy
+    Copy,
 }
 
 pub trait Sequelizable {
@@ -20,7 +20,7 @@ pub trait Sequelizable {
     fn to_values(&self, op: &SqlOperation) -> String {
         match op {
             SqlOperation::Insert => self.to_insert_values(),
-            SqlOperation::Copy => self.to_copy_values()
+            SqlOperation::Copy => self.to_copy_values(),
         }
     }
 

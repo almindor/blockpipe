@@ -1,7 +1,7 @@
 extern crate web3;
 
 use crate::sql::Sequelizable;
-use web3::types::{Block, Transaction, H256, H160};
+use web3::types::{Block, Transaction, H160, H256};
 
 impl Sequelizable for Transaction {
     fn table_name() -> &'static str {
@@ -34,19 +34,20 @@ impl Sequelizable for Transaction {
     fn to_copy_values(&self) -> String {
         format!(
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-                self.pg_hex::<H256>(self.hash),
-                self.nonce.as_u64(),
-                self.pg_hex::<H256>(self.block_hash.unwrap()),
-                self.block_number.unwrap(),
-                self.transaction_index.unwrap(),
-                self.pg_hex::<H160>(self.from),
-                match self.to {
-                    Some(dest) => self.pg_hex::<H160>(dest),
-                    None => String::from("NULL")
-                },
-                self.value,
-                self.gas,
-                self.gas_price)
+            self.pg_hex::<H256>(self.hash),
+            self.nonce.as_u64(),
+            self.pg_hex::<H256>(self.block_hash.unwrap()),
+            self.block_number.unwrap(),
+            self.transaction_index.unwrap(),
+            self.pg_hex::<H160>(self.from),
+            match self.to {
+                Some(dest) => self.pg_hex::<H160>(dest),
+                None => String::from("NULL"),
+            },
+            self.value,
+            self.gas,
+            self.gas_price
+        )
     }
 }
 

@@ -14,10 +14,10 @@ use web3::types::{Block, BlockId, SyncState, Transaction};
 use web3::Transport;
 use web3::Web3;
 
+use log::{info, trace};
 use simple_signal::{self, Signal};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use log::{info, trace};
 
 mod error;
 
@@ -44,8 +44,8 @@ impl<T: Transport> Pipe<T> {
         eloop: EventLoopHandle,
         pg_path: &str,
         op: SqlOperation,
-        last_block_override: i64
-    ) -> Result<Pipe<T>, Box<std::error::Error>> {
+        last_block_override: i64,
+    ) -> Result<Pipe<T>, Box<dyn std::error::Error>> {
         let pg_client = Connection::connect(pg_path, TlsMode::None)?;
 
         let rows = pg_client.query(sql::LAST_DB_BLOCK_QUERY, &[])?;
@@ -87,10 +87,10 @@ impl<T: Transport> Pipe<T> {
     }
 
     fn sleep_when_syncing(&self) -> bool {
-       if self.syncing {
-           Self::sleep_with_msg("Node is syncing, sleeping for a minute.");
-           return true;
-       }
+        if self.syncing {
+            Self::sleep_with_msg("Node is syncing, sleeping for a minute.");
+            return true;
+        }
 
         false
     }
@@ -119,7 +119,10 @@ impl<T: Transport> Pipe<T> {
         sql_query.pop(); // remove ,
     }
 
-    fn store_next_batch(&mut self, running: &Arc<AtomicBool>) -> Result<i32, error::PipeError> {
+    fn store_next_batch(
+        &mut self,
+        running: &Arc<AtomicBool>,
+    ) -> Result<i32, error::PipeError> {
         let mut next_block_number = self.last_db_block + 1;
         let mut processed: i32 = 0;
         let mut processed_tx: i32 = 0;
@@ -138,7 +141,7 @@ impl<T: Transport> Pipe<T> {
             && next_block_number <= self.last_node_block
             && running.load(Ordering::SeqCst)
         {
-            #[cfg(feature="timing")]
+            #[cfg(feature = "timing")]
             let start = PreciseTime::now();
 
             trace!("Getting block #{}", next_block_number);
@@ -181,20 +184,26 @@ impl<T: Transport> Pipe<T> {
         if processed_tx > 0 {
             match self.operation {
                 SqlOperation::Insert => {
-                    trace!("Storing {} transactions to DB using insert", processed_tx);
+                    trace!(
+                        "Storing {} transactions to DB using insert",
+                        processed_tx
+                    );
                     // upsert in case of reorg
                     Self::trim_ends(&mut data_transactions);
                     write!(&mut data_transactions, "\nON CONFLICT (hash) DO UPDATE SET nonce = excluded.nonce, blockHash = excluded.blockHash, blockNumber = excluded.blockNumber, transactionIndex = excluded.transactionIndex, \"from\" = excluded.from, \"to\" = excluded.to, \"value\" = excluded.value, gas = excluded.gas, gasPrice = excluded.gasPrice")?;
                     pg_tx.execute(&data_transactions, &[])?;
                     trace!("Commiting direct DB operations");
                     pg_tx.commit()?;
-                },
+                }
                 SqlOperation::Copy => {
                     trace!("Commiting direct DB operations");
                     pg_tx.commit()?;
-                    trace!("Storing {} transactions to DB using copy", processed_tx);
+                    trace!(
+                        "Storing {} transactions to DB using copy",
+                        processed_tx
+                    );
                     print!("{}", data_transactions);
-                },
+                }
             }
         } else {
             trace!("Commiting direct DB operations");
@@ -210,7 +219,10 @@ impl<T: Transport> Pipe<T> {
         Ok(processed)
     }
 
-    pub fn main(&mut self, running: &Arc<AtomicBool>) -> Result<i32, error::PipeError> {
+    pub fn main(
+        &mut self,
+        running: &Arc<AtomicBool>,
+    ) -> Result<i32, error::PipeError> {
         self.update_node_info()?;
         if self.sleep_when_syncing() {
             return Ok(0);
@@ -219,15 +231,18 @@ impl<T: Transport> Pipe<T> {
         info!(
             "Queue size: {}\nlast_db_block: {}, last_node_block: {}",
             self.last_node_block - self.last_db_block,
-            self.last_db_block, self.last_node_block
+            self.last_db_block,
+            self.last_node_block
         );
 
         match self.operation {
-            SqlOperation::Insert => {},
+            SqlOperation::Insert => {}
             SqlOperation::Copy => Self::print_copy_header::<Transaction>(),
         }
 
-        while self.last_db_block < self.last_node_block && running.load(Ordering::SeqCst) {
+        while self.last_db_block < self.last_node_block
+            && running.load(Ordering::SeqCst)
+        {
             self.store_next_batch(running)?;
         }
 
@@ -241,10 +256,13 @@ impl<T: Transport> Pipe<T> {
     pub fn run(&mut self) -> Result<i32, error::PipeError> {
         let running = Arc::new(AtomicBool::new(true));
         let r = running.clone();
-        simple_signal::set_handler(&[Signal::Int, Signal::Term], move |_signals| {
-            info!("Exiting...");
-            r.store(false, Ordering::SeqCst);
-        });
+        simple_signal::set_handler(
+            &[Signal::Int, Signal::Term],
+            move |_signals| {
+                info!("Exiting...");
+                r.store(false, Ordering::SeqCst);
+            },
+        );
 
         let mut iteration: u64 = 0;
         while running.load(Ordering::SeqCst) {
