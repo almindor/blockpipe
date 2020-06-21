@@ -19,15 +19,15 @@ impl std::fmt::Display for PipeError {
     }
 }
 
-impl std::error::Error for PipeError {
-    fn description(&self) -> &str {
-        match *self {
-            PipeError::Fmt(ref err) => err.description(),
-            PipeError::Web3(ref err) => err.description(),
-            PipeError::Postgres(ref err) => err.description(),
-        }
-    }
-}
+// impl std::error::Error for PipeError {
+//     fn description(&self) -> &str {
+//         match *self {
+//             PipeError::Fmt(ref err) => err.description(),
+//             PipeError::Web3(ref err) => err.description(),
+//             PipeError::Postgres(ref err) => err.description(),
+//         }
+//     }
+// }
 
 impl From<std::fmt::Error> for PipeError {
     fn from(err: std::fmt::Error) -> PipeError {

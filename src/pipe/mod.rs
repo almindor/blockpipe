@@ -1,4 +1,4 @@
-use postgres::{Connection, TlsMode};
+use postgres::{Client, NoTls};
 use std::{thread, time};
 
 use std;
@@ -10,7 +10,7 @@ use crate::sql::{Sequelizable, SqlOperation};
 use web3;
 use web3::futures::Future;
 use web3::transports::EventLoopHandle;
-use web3::types::{Block, BlockId, SyncState, Transaction};
+use web3::types::{Block, BlockId, SyncState, Transaction, U64};
 use web3::Transport;
 use web3::Web3;
 
@@ -27,7 +27,7 @@ const MAX_BLOCKS_PER_BATCH: i32 = 100;
 pub struct Pipe<T: Transport> {
     eloop: EventLoopHandle, // needs to be held for event loop to be owned right
     web3: Web3<T>,
-    pg_client: Connection,
+    pg_client: Client,
     last_db_block: u64, // due to BIGINT and lack of NUMERIC support in driver
     last_node_block: u64,
     syncing: bool,
@@ -46,7 +46,7 @@ impl<T: Transport> Pipe<T> {
         op: SqlOperation,
         last_block_override: i64,
     ) -> Result<Pipe<T>, Box<dyn std::error::Error>> {
-        let pg_client = Connection::connect(pg_path, TlsMode::None)?;
+        let mut pg_client = Client::connect(pg_path, NoTls)?;
 
         let rows = pg_client.query(sql::LAST_DB_BLOCK_QUERY, &[])?;
         let mut last_db_block_number = match rows.iter().next() {
@@ -148,7 +148,7 @@ impl<T: Transport> Pipe<T> {
             let block = self
                 .web3
                 .eth()
-                .block_with_txs(BlockId::from(next_block_number))
+                .block_with_txs(BlockId::from(U64::from(next_block_number)))
                 .wait()?
                 .unwrap();
 
@@ -175,11 +175,11 @@ impl<T: Transport> Pipe<T> {
         }
         Self::trim_ends(&mut sql_blocks);
 
-        let pg_tx = self.pg_client.transaction()?;
+        let mut pg_tx = self.pg_client.transaction()?;
         // save the blocks
 
         trace!("Storing {} blocks to DB using insert", processed);
-        pg_tx.execute(&sql_blocks, &[])?;
+        pg_tx.execute(sql_blocks.as_str(), &[])?;
 
         if processed_tx > 0 {
             match self.operation {
@@ -191,7 +191,7 @@ impl<T: Transport> Pipe<T> {
                     // upsert in case of reorg
                     Self::trim_ends(&mut data_transactions);
                     write!(&mut data_transactions, "\nON CONFLICT (hash) DO UPDATE SET nonce = excluded.nonce, blockHash = excluded.blockHash, blockNumber = excluded.blockNumber, transactionIndex = excluded.transactionIndex, \"from\" = excluded.from, \"to\" = excluded.to, \"value\" = excluded.value, gas = excluded.gas, gasPrice = excluded.gasPrice")?;
-                    pg_tx.execute(&data_transactions, &[])?;
+                    pg_tx.execute(data_transactions.as_str(), &[])?;
                     trace!("Commiting direct DB operations");
                     pg_tx.commit()?;
                 }

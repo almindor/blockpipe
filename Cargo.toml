@@ -6,8 +6,8 @@ edition = "2018"
 
 [dependencies]
 dotenv = "0.15.0"
-postgres = "0.15.2"
-web3 = { git = "https://github.com/akropolisio/rust-web3" }
+postgres = "0.17.3"
+web3 = "0.11.0"
 simple-signal = "1.1.1"
 log = { version = "0.4.8", features = ["release_max_level_info"] }
 stderrlog = "0.4.3"
