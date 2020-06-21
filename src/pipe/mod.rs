@@ -119,16 +119,12 @@ impl<T: Transport> Pipe<T> {
         sql_query.pop(); // remove ,
     }
 
-    fn store_next_batch(
-        &mut self,
-        running: &Arc<AtomicBool>,
-    ) -> Result<i32, error::PipeError> {
+    fn store_next_batch(&mut self, running: &Arc<AtomicBool>) -> Result<i32, error::PipeError> {
         let mut next_block_number = self.last_db_block + 1;
         let mut processed: i32 = 0;
         let mut processed_tx: i32 = 0;
         let mut sql_blocks: String = String::with_capacity(1096 * 1024 * 10);
-        let mut data_transactions: String =
-            String::with_capacity(4096 * 1024 * 10);
+        let mut data_transactions: String = String::with_capacity(4096 * 1024 * 10);
 
         Self::write_insert_header::<Block<Transaction>>(&mut sql_blocks)?;
 
@@ -160,11 +156,7 @@ impl<T: Transport> Pipe<T> {
 
             trace!("Getting transactions for block");
             for tx in block.transactions.iter() {
-                writeln!(
-                    &mut data_transactions,
-                    "{}",
-                    tx.to_values(&self.operation)
-                )?;
+                writeln!(&mut data_transactions, "{}", tx.to_values(&self.operation))?;
                 processed_tx += 1;
             }
             trace!("Got {} transactions", processed_tx);
@@ -184,10 +176,7 @@ impl<T: Transport> Pipe<T> {
         if processed_tx > 0 {
             match self.operation {
                 SqlOperation::Insert => {
-                    trace!(
-                        "Storing {} transactions to DB using insert",
-                        processed_tx
-                    );
+                    trace!("Storing {} transactions to DB using insert", processed_tx);
                     // upsert in case of reorg
                     Self::trim_ends(&mut data_transactions);
                     write!(&mut data_transactions, "\nON CONFLICT (hash) DO UPDATE SET nonce = excluded.nonce, blockHash = excluded.blockHash, blockNumber = excluded.blockNumber, transactionIndex = excluded.transactionIndex, \"from\" = excluded.from, \"to\" = excluded.to, \"value\" = excluded.value, gas = excluded.gas, gasPrice = excluded.gasPrice")?;
@@ -198,10 +187,7 @@ impl<T: Transport> Pipe<T> {
                 SqlOperation::Copy => {
                     trace!("Commiting direct DB operations");
                     pg_tx.commit()?;
-                    trace!(
-                        "Storing {} transactions to DB using copy",
-                        processed_tx
-                    );
+                    trace!("Storing {} transactions to DB using copy", processed_tx);
                     print!("{}", data_transactions);
                 }
             }
@@ -219,10 +205,7 @@ impl<T: Transport> Pipe<T> {
         Ok(processed)
     }
 
-    pub fn main(
-        &mut self,
-        running: &Arc<AtomicBool>,
-    ) -> Result<i32, error::PipeError> {
+    pub fn main(&mut self, running: &Arc<AtomicBool>) -> Result<i32, error::PipeError> {
         self.update_node_info()?;
         if self.sleep_when_syncing() {
             return Ok(0);
@@ -240,9 +223,7 @@ impl<T: Transport> Pipe<T> {
             SqlOperation::Copy => Self::print_copy_header::<Transaction>(),
         }
 
-        while self.last_db_block < self.last_node_block
-            && running.load(Ordering::SeqCst)
-        {
+        while self.last_db_block < self.last_node_block && running.load(Ordering::SeqCst) {
             self.store_next_batch(running)?;
         }
 
@@ -256,13 +237,10 @@ impl<T: Transport> Pipe<T> {
     pub fn run(&mut self) -> Result<i32, error::PipeError> {
         let running = Arc::new(AtomicBool::new(true));
         let r = running.clone();
-        simple_signal::set_handler(
-            &[Signal::Int, Signal::Term],
-            move |_signals| {
-                info!("Exiting...");
-                r.store(false, Ordering::SeqCst);
-            },
-        );
+        simple_signal::set_handler(&[Signal::Int, Signal::Term], move |_signals| {
+            info!("Exiting...");
+            r.store(false, Ordering::SeqCst);
+        });
 
         let mut iteration: u64 = 0;
         while running.load(Ordering::SeqCst) {

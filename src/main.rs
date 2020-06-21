@@ -12,9 +12,7 @@ fn connect_to_ipc(path: &str) -> (EventLoopHandle, Ipc) {
     loop {
         match Ipc::new(path) {
             Ok(result) => return result,
-            Err(err) => {
-                eprintln!("IPC connection failed with: {}, retrying in 5s", err)
-            }
+            Err(err) => eprintln!("IPC connection failed with: {}, retrying in 5s", err),
         }
 
         std::thread::sleep(std::time::Duration::from_secs(5));
@@ -37,8 +35,7 @@ fn main() {
 
     dotenv().ok();
     // main env var, panic if missing
-    let pg_path =
-        env::var("PG_PATH").expect("PG_PATH env var should be provided");
+    let pg_path = env::var("PG_PATH").expect("PG_PATH env var should be provided");
     let ipc_path = env::var("IPC_PATH");
     let http_path = env::var("RPC_PATH");
     let labo = match env::var("LABO") {
@@ -55,14 +52,11 @@ fn main() {
 
     if let Ok(path) = ipc_path {
         let (eloop, transport) = connect_to_ipc(&path);
-        let mut pipe =
-            Pipe::new(transport, eloop, &pg_path, operation, labo).unwrap();
+        let mut pipe = Pipe::new(transport, eloop, &pg_path, operation, labo).unwrap();
         pipe.run().unwrap();
     } else if let Ok(path) = http_path {
-        let (eloop, transport) =
-            Http::new(&path).expect("HTTP connection failed");
-        let mut pipe =
-            Pipe::new(transport, eloop, &pg_path, operation, labo).unwrap();
+        let (eloop, transport) = Http::new(&path).expect("HTTP connection failed");
+        let mut pipe = Pipe::new(transport, eloop, &pg_path, operation, labo).unwrap();
         pipe.run().unwrap();
     } else {
         panic!("IPC_PATH or RPC_PATH should be provided");
