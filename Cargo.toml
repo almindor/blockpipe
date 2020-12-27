@@ -9,6 +9,6 @@ dotenv = "0.15.0"
 postgres = "0.17.3"
 web3 = "0.11.0"
 simple-signal = "1.1.1"
-log = { version = "0.4.8", features = ["release_max_level_info"] }
-stderrlog = "0.4.3"
+log = { version = "0.4.11", features = ["release_max_level_info"] }
+stderrlog = "0.5.0"
 
