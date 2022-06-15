@@ -16,26 +16,26 @@ impl Sequelizable for Transaction {
     fn to_insert_values(&self) -> String {
         format!(
             "(DECODE('{:x}', 'hex'), {}, DECODE('{:x}', 'hex'), {}, {}, {}, {}, {}, {}, {}),",
-                self.hash,
-                self.nonce.as_u64(),
-                self.block_hash.unwrap(),
-                self.block_number.unwrap(),
-                self.transaction_index.unwrap(),
-                match self.from {
-                    Some(src) => format!("DECODE('{:x}', 'hex')", src),
-                    None => String::from("NULL"),
-                },                
-                match self.to {
-                    Some(dest) => format!("DECODE('{:x}', 'hex')", dest),
-                    None => String::from("NULL"),
-                },
-                self.value,
-                self.gas,
-                match self.gas_price {
-                    Some(gp) => format!("{}", gp),
-                    None => String::from("NULL"),
-                },
-            )
+            self.hash,
+            self.nonce.as_u64(),
+            self.block_hash.unwrap(),
+            self.block_number.unwrap(),
+            self.transaction_index.unwrap(),
+            match self.from {
+                Some(src) => format!("DECODE('{:x}', 'hex')", src),
+                None => String::from("NULL"),
+            },
+            match self.to {
+                Some(dest) => format!("DECODE('{:x}', 'hex')", dest),
+                None => String::from("NULL"),
+            },
+            self.value,
+            self.gas,
+            match self.gas_price {
+                Some(gp) => format!("{}", gp),
+                None => String::from("NULL"),
+            },
+        )
     }
 
     fn to_copy_values(&self) -> String {
@@ -59,7 +59,7 @@ impl Sequelizable for Transaction {
             match self.gas_price {
                 Some(gp) => format!("{}", gp),
                 None => String::from("NULL"),
-            },        
+            },
         )
     }
 }

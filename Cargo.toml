@@ -5,9 +5,10 @@ authors = ["Ales Katona <almindor@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+crossbeam-channel = "0.5"
 dotenv = "0.15.0"
 log = { version = "0.4.11", features = ["release_max_level_info"] }
-postgres = "0.19.0"
+tokio-postgres = "0.7.6"
 simple-signal = "1.1.1"
 stderrlog = "0.5.0"
 tokio = "1.19.2"

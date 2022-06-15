@@ -2,7 +2,7 @@
 pub enum PipeError {
     Fmt(std::fmt::Error),
     Web3(web3::Error),
-    Postgres(postgres::Error),
+    Postgres(tokio_postgres::Error),
 }
 
 impl std::fmt::Display for PipeError {
@@ -37,8 +37,8 @@ impl From<web3::Error> for PipeError {
     }
 }
 
-impl From<postgres::Error> for PipeError {
-    fn from(err: postgres::Error) -> PipeError {
+impl From<tokio_postgres::Error> for PipeError {
+    fn from(err: tokio_postgres::Error) -> PipeError {
         PipeError::Postgres(err)
     }
 }

@@ -1,5 +1,5 @@
-use postgres::{Client, NoTls};
-use std::{thread, time};
+use std::time;
+use tokio_postgres::{Client, NoTls};
 
 use std::fmt::Write;
 use std::string::String;
@@ -9,12 +9,9 @@ use crate::sql::{Sequelizable, SqlOperation};
 use web3::types::{Block, BlockId, SyncState, Transaction, U64};
 use web3::Transport;
 use web3::Web3;
-use web3::block_on;
 
 use log::{info, trace};
 use simple_signal::{self, Signal};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 mod error;
 
@@ -28,6 +25,8 @@ pub struct Pipe<T: Transport> {
     last_node_block: u64,
     syncing: bool,
     operation: SqlOperation,
+    sleep_r: crossbeam_channel::Receiver<i32>,
+    running: bool,
 }
 
 impl<T: Transport> Pipe<T> {
@@ -35,15 +34,22 @@ impl<T: Transport> Pipe<T> {
 
     // we want to return error here if db fails
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(
+    pub async fn new(
         transport: T,
         pg_path: &str,
         op: SqlOperation,
         last_block_override: i64,
+        sleep_r: crossbeam_channel::Receiver<i32>,
     ) -> Result<Pipe<T>, Box<dyn std::error::Error>> {
-        let mut pg_client = Client::connect(pg_path, NoTls)?;
+        let (pg_client, connection) = tokio_postgres::connect(pg_path, NoTls).await?;
 
-        let rows = pg_client.query(sql::LAST_DB_BLOCK_QUERY, &[])?;
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                panic!("PG connection error: {}", e);
+            }
+        });
+
+        let rows = pg_client.query(sql::LAST_DB_BLOCK_QUERY, &[]).await?;
         let mut last_db_block_number = match rows.get(0) {
             Some(row) => row.get(0),
             None => 0,
@@ -62,27 +68,33 @@ impl<T: Transport> Pipe<T> {
             last_node_block: 0,
             syncing: false,
             operation: op,
+            running: true,
+            sleep_r,
         })
     }
 
-    fn update_node_info(&mut self) -> Result<bool, web3::Error> {
+    async fn update_node_info(&mut self) -> Result<bool, web3::Error> {
         info!("Getting info from eth node.");
-        let last_block_number = block_on(self.web3.eth().block_number())?.as_u64();
-        let syncing = block_on(self.web3.eth().syncing())?;
+        let last_block_number = self.web3.eth().block_number().await?.as_u64();
+        let syncing = self.web3.eth().syncing().await?;
 
         self.last_node_block = last_block_number;
         self.syncing = syncing != SyncState::NotSyncing;
         Ok(true)
     }
 
-    fn sleep_with_msg(msg: &str) {
+    fn sleep_with_msg(&mut self, msg: &str) {
         info!("{}", msg);
-        thread::sleep(Self::ONE_MINUTE);
+        // if it's ok means we got a channel send from the singal handler
+        if self.sleep_r.recv_timeout(Self::ONE_MINUTE).is_ok() {
+            log::warn!("sleep interrupted");
+            self.running = false;
+        }
     }
 
-    fn sleep_when_syncing(&self) -> bool {
+    fn sleep_when_syncing(&mut self) -> bool {
         if self.syncing {
-            Self::sleep_with_msg("Node is syncing, sleeping for a minute.");
+            self.sleep_with_msg("Node is syncing, sleeping for a minute.");
             return true;
         }
 
@@ -113,7 +125,7 @@ impl<T: Transport> Pipe<T> {
         sql_query.pop(); // remove ,
     }
 
-    fn store_next_batch(&mut self, running: &Arc<AtomicBool>) -> Result<i32, error::PipeError> {
+    async fn store_next_batch(&mut self) -> Result<i32, error::PipeError> {
         let mut next_block_number = self.last_db_block + 1;
         let mut processed: i32 = 0;
         let mut processed_tx: i32 = 0;
@@ -129,17 +141,19 @@ impl<T: Transport> Pipe<T> {
         trace!("Getting blocks");
         while processed < MAX_BLOCKS_PER_BATCH
             && next_block_number <= self.last_node_block
-            && running.load(Ordering::SeqCst)
+            && self.running
         {
             #[cfg(feature = "timing")]
             let start = PreciseTime::now();
 
             trace!("Getting block #{}", next_block_number);
-            let block = block_on(self
+            let block = self
                 .web3
                 .eth()
                 .block_with_txs(BlockId::from(U64::from(next_block_number)))
-            ).unwrap().unwrap();
+                .await
+                .unwrap()
+                .unwrap();
 
             trace!("Got block #{}", next_block_number);
             next_block_number += 1;
@@ -160,11 +174,11 @@ impl<T: Transport> Pipe<T> {
         }
         Self::trim_ends(&mut sql_blocks);
 
-        let mut pg_tx = self.pg_client.transaction()?;
+        let pg_tx = self.pg_client.transaction().await?;
         // save the blocks
 
         trace!("Storing {} blocks to DB using insert", processed);
-        pg_tx.execute(sql_blocks.as_str(), &[])?;
+        pg_tx.execute(sql_blocks.as_str(), &[]).await?;
 
         if processed_tx > 0 {
             match self.operation {
@@ -173,20 +187,20 @@ impl<T: Transport> Pipe<T> {
                     // upsert in case of reorg
                     Self::trim_ends(&mut data_transactions);
                     write!(&mut data_transactions, "\nON CONFLICT (hash) DO UPDATE SET nonce = excluded.nonce, blockHash = excluded.blockHash, blockNumber = excluded.blockNumber, transactionIndex = excluded.transactionIndex, \"from\" = excluded.from, \"to\" = excluded.to, \"value\" = excluded.value, gas = excluded.gas, gasPrice = excluded.gasPrice")?;
-                    pg_tx.execute(data_transactions.as_str(), &[])?;
+                    pg_tx.execute(data_transactions.as_str(), &[]).await?;
                     trace!("Commiting direct DB operations");
-                    pg_tx.commit()?;
+                    pg_tx.commit().await?;
                 }
                 SqlOperation::Copy => {
                     trace!("Commiting direct DB operations");
-                    pg_tx.commit()?;
+                    pg_tx.commit().await?;
                     trace!("Storing {} transactions to DB using copy", processed_tx);
                     print!("{}", data_transactions);
                 }
             }
         } else {
             trace!("Commiting direct DB operations");
-            pg_tx.commit()?;
+            pg_tx.commit().await?;
         }
 
         self.last_db_block = next_block_number - 1;
@@ -198,8 +212,8 @@ impl<T: Transport> Pipe<T> {
         Ok(processed)
     }
 
-    pub fn main(&mut self, running: &Arc<AtomicBool>) -> Result<i32, error::PipeError> {
-        self.update_node_info()?;
+    pub async fn main(&mut self) -> Result<i32, error::PipeError> {
+        self.update_node_info().await?;
         if self.sleep_when_syncing() {
             return Ok(0);
         }
@@ -216,30 +230,31 @@ impl<T: Transport> Pipe<T> {
             SqlOperation::Copy => Self::print_copy_header::<Transaction>(),
         }
 
-        while self.last_db_block < self.last_node_block && running.load(Ordering::SeqCst) {
-            self.store_next_batch(running)?;
+        while self.last_db_block < self.last_node_block && self.running {
+            self.store_next_batch().await?;
         }
 
-        if running.load(Ordering::SeqCst) {
-            Self::sleep_with_msg("Run done, sleeping for one minute.");
+        if self.running {
+            self.sleep_with_msg("Run done, sleeping for one minute.");
         }
 
         Ok(0)
     }
 
-    pub fn run(&mut self) -> Result<i32, error::PipeError> {
-        let running = Arc::new(AtomicBool::new(true));
-        let r = running.clone();
+    pub async fn run(
+        &mut self,
+        sleep_s: crossbeam_channel::Sender<i32>,
+    ) -> Result<i32, error::PipeError> {
         simple_signal::set_handler(&[Signal::Int, Signal::Term], move |_signals| {
             info!("Exiting...");
-            r.store(false, Ordering::SeqCst);
+            sleep_s.send(1).unwrap();
         });
 
         let mut iteration: u64 = 0;
-        while running.load(Ordering::SeqCst) {
+        while self.running {
             iteration += 1;
             trace!("Main loop iteration #{}", iteration);
-            self.main(&running)?;
+            self.main().await?;
         }
 
         Ok(0)

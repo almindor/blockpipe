@@ -1,5 +1,4 @@
 use dotenv::dotenv;
-use web3::block_on;
 use std::env;
 use web3::transports::{Http, Ipc};
 
@@ -9,9 +8,9 @@ mod sql;
 use crate::pipe::Pipe;
 use crate::sql::SqlOperation;
 
-fn connect_to_ipc(path: &str) -> Ipc {
+async fn connect_to_ipc(path: &str) -> Ipc {
     loop {
-        let result = block_on(Ipc::new(path));
+        let result = Ipc::new(path).await;
         match result {
             Ok(transport) => return transport,
             Err(err) => panic!("error on transport creation {}", err),
@@ -51,14 +50,20 @@ async fn main() {
         }
     }
 
+    let (sleep_s, sleep_r) = crossbeam_channel::bounded(0);
+
     if let Ok(path) = ipc_path {
-        let transport = connect_to_ipc(&path);
-        let mut pipe = Pipe::new(transport, &pg_path, operation, labo).unwrap();
-        pipe.run().unwrap();
+        let transport = connect_to_ipc(&path).await;
+        let mut pipe = Pipe::new(transport, &pg_path, operation, labo, sleep_r)
+            .await
+            .unwrap();
+        std::process::exit(pipe.run(sleep_s).await.unwrap());
     } else if let Ok(path) = http_path {
         let transport = Http::new(&path).expect("HTTP connection failed");
-        let mut pipe = Pipe::new(transport, &pg_path, operation, labo).unwrap();
-        pipe.run().unwrap();
+        let mut pipe = Pipe::new(transport, &pg_path, operation, labo, sleep_r)
+            .await
+            .unwrap();
+        std::process::exit(pipe.run(sleep_s).await.unwrap());
     } else {
         panic!("IPC_PATH or RPC_PATH should be provided");
     }
