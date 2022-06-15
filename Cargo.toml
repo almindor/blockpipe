@@ -6,8 +6,9 @@ edition = "2018"
 
 [dependencies]
 dotenv = "0.15.0"
-postgres = "0.19.0"
-web3 = "0.18.0"
-simple-signal = "1.1.1"
 log = { version = "0.4.11", features = ["release_max_level_info"] }
+postgres = "0.19.0"
+simple-signal = "1.1.1"
 stderrlog = "0.5.0"
+tokio = "1.19.2"
+web3 = "0.18.0"

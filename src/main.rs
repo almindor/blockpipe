@@ -19,7 +19,8 @@ fn connect_to_ipc(path: &str) -> Ipc {
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let timestamps = if cfg!(debug_assertions) {
         stderrlog::Timestamp::Millisecond
     } else {
