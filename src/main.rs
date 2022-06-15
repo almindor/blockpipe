@@ -1,6 +1,7 @@
 use dotenv::dotenv;
+use web3::block_on;
 use std::env;
-use web3::transports::{EventLoopHandle, Http, Ipc};
+use web3::transports::{Http, Ipc};
 
 mod pipe;
 mod sql;
@@ -8,14 +9,13 @@ mod sql;
 use crate::pipe::Pipe;
 use crate::sql::SqlOperation;
 
-fn connect_to_ipc(path: &str) -> (EventLoopHandle, Ipc) {
+fn connect_to_ipc(path: &str) -> Ipc {
     loop {
-        match Ipc::new(path) {
-            Ok(result) => return result,
-            Err(err) => eprintln!("IPC connection failed with: {}, retrying in 5s", err),
+        let result = block_on(Ipc::new(path));
+        match result {
+            Ok(transport) => return transport,
+            Err(err) => panic!("error on transport creation {}", err),
         }
-
-        std::thread::sleep(std::time::Duration::from_secs(5));
     }
 }
 
@@ -51,12 +51,12 @@ fn main() {
     }
 
     if let Ok(path) = ipc_path {
-        let (eloop, transport) = connect_to_ipc(&path);
-        let mut pipe = Pipe::new(transport, eloop, &pg_path, operation, labo).unwrap();
+        let transport = connect_to_ipc(&path);
+        let mut pipe = Pipe::new(transport, &pg_path, operation, labo).unwrap();
         pipe.run().unwrap();
     } else if let Ok(path) = http_path {
-        let (eloop, transport) = Http::new(&path).expect("HTTP connection failed");
-        let mut pipe = Pipe::new(transport, eloop, &pg_path, operation, labo).unwrap();
+        let transport = Http::new(&path).expect("HTTP connection failed");
+        let mut pipe = Pipe::new(transport, &pg_path, operation, labo).unwrap();
         pipe.run().unwrap();
     } else {
         panic!("IPC_PATH or RPC_PATH should be provided");

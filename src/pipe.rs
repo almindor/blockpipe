@@ -1,18 +1,15 @@
 use postgres::{Client, NoTls};
 use std::{thread, time};
 
-use std;
 use std::fmt::Write;
 use std::string::String;
 
 use crate::sql;
 use crate::sql::{Sequelizable, SqlOperation};
-use web3;
-use web3::futures::Future;
-use web3::transports::EventLoopHandle;
 use web3::types::{Block, BlockId, SyncState, Transaction, U64};
 use web3::Transport;
 use web3::Web3;
+use web3::block_on;
 
 use log::{info, trace};
 use simple_signal::{self, Signal};
@@ -25,7 +22,6 @@ const MAX_BLOCKS_PER_BATCH: i32 = 100;
 
 #[allow(dead_code)]
 pub struct Pipe<T: Transport> {
-    eloop: EventLoopHandle, // needs to be held for event loop to be owned right
     web3: Web3<T>,
     pg_client: Client,
     last_db_block: u64, // due to BIGINT and lack of NUMERIC support in driver
@@ -41,7 +37,6 @@ impl<T: Transport> Pipe<T> {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
         transport: T,
-        eloop: EventLoopHandle,
         pg_path: &str,
         op: SqlOperation,
         last_block_override: i64,
@@ -49,7 +44,7 @@ impl<T: Transport> Pipe<T> {
         let mut pg_client = Client::connect(pg_path, NoTls)?;
 
         let rows = pg_client.query(sql::LAST_DB_BLOCK_QUERY, &[])?;
-        let mut last_db_block_number = match rows.iter().next() {
+        let mut last_db_block_number = match rows.get(0) {
             Some(row) => row.get(0),
             None => 0,
         };
@@ -61,7 +56,6 @@ impl<T: Transport> Pipe<T> {
         let web3 = Web3::new(transport);
 
         Ok(Pipe {
-            eloop,
             web3,
             pg_client,
             last_db_block: last_db_block_number as u64,
@@ -73,8 +67,8 @@ impl<T: Transport> Pipe<T> {
 
     fn update_node_info(&mut self) -> Result<bool, web3::Error> {
         info!("Getting info from eth node.");
-        let last_block_number = self.web3.eth().block_number().wait()?.as_u64();
-        let syncing = self.web3.eth().syncing().wait()?;
+        let last_block_number = block_on(self.web3.eth().block_number())?.as_u64();
+        let syncing = block_on(self.web3.eth().syncing())?;
 
         self.last_node_block = last_block_number;
         self.syncing = syncing != SyncState::NotSyncing;
@@ -141,12 +135,11 @@ impl<T: Transport> Pipe<T> {
             let start = PreciseTime::now();
 
             trace!("Getting block #{}", next_block_number);
-            let block = self
+            let block = block_on(self
                 .web3
                 .eth()
                 .block_with_txs(BlockId::from(U64::from(next_block_number)))
-                .wait()?
-                .unwrap();
+            ).unwrap().unwrap();
 
             trace!("Got block #{}", next_block_number);
             next_block_number += 1;

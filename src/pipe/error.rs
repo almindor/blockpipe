@@ -1,7 +1,3 @@
-use postgres;
-use std;
-use web3;
-
 #[derive(Debug)]
 pub enum PipeError {
     Fmt(std::fmt::Error),

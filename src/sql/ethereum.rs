@@ -15,20 +15,27 @@ impl Sequelizable for Transaction {
 
     fn to_insert_values(&self) -> String {
         format!(
-            "(DECODE('{:x}', 'hex'), {}, DECODE('{:x}', 'hex'), {}, {}, DECODE('{:x}', 'hex'), {}, {}, {}, {}),",
+            "(DECODE('{:x}', 'hex'), {}, DECODE('{:x}', 'hex'), {}, {}, {}, {}, {}, {}, {}),",
                 self.hash,
                 self.nonce.as_u64(),
                 self.block_hash.unwrap(),
                 self.block_number.unwrap(),
                 self.transaction_index.unwrap(),
-                self.from,
+                match self.from {
+                    Some(src) => format!("DECODE('{:x}', 'hex')", src),
+                    None => String::from("NULL"),
+                },                
                 match self.to {
                     Some(dest) => format!("DECODE('{:x}', 'hex')", dest),
-                    None => String::from("NULL")
+                    None => String::from("NULL"),
                 },
                 self.value,
                 self.gas,
-                self.gas_price)
+                match self.gas_price {
+                    Some(gp) => format!("{}", gp),
+                    None => String::from("NULL"),
+                },
+            )
     }
 
     fn to_copy_values(&self) -> String {
@@ -39,14 +46,20 @@ impl Sequelizable for Transaction {
             self.pg_hex::<H256>(self.block_hash.unwrap()),
             self.block_number.unwrap(),
             self.transaction_index.unwrap(),
-            self.pg_hex::<H160>(self.from),
+            match self.from {
+                Some(src) => self.pg_hex::<H160>(src),
+                None => String::from("NULL"),
+            },
             match self.to {
                 Some(dest) => self.pg_hex::<H160>(dest),
                 None => String::from("NULL"),
             },
             self.value,
             self.gas,
-            self.gas_price
+            match self.gas_price {
+                Some(gp) => format!("{}", gp),
+                None => String::from("NULL"),
+            },        
         )
     }
 }
