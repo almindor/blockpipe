@@ -6,10 +6,10 @@ edition = "2018"
 
 [dependencies]
 crossbeam-channel = "0.5"
-dotenv = "0.15.0"
-log = { version = "0.4.17", features = ["release_max_level_info"] }
-tokio-postgres = "0.7.6"
-simple-signal = "1.1.1"
-stderrlog = "0.5.1"
-tokio = "1.19.2"
-web3 = "0.18.0"
+dotenv = "0.15"
+log = { version = "0.4", features = ["release_max_level_info"] }
+tokio-postgres = "0.7"
+simple-signal = "1.1"
+stderrlog = "0.5"
+tokio = "1.19"
+web3 = "0.18"
